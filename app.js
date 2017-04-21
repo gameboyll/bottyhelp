@@ -10,12 +10,12 @@
 /* jshint node: true, devel: true */
 'use strict';
 
-const 
+const
   bodyParser = require('body-parser'),
   config = require('config'),
   crypto = require('crypto'),
   express = require('express'),
-  https = require('https'),  
+  https = require('https'),
   request = require('request');
 
 var app = express();
@@ -102,17 +102,17 @@ function updateClaim(id,amount,comment,receipt,status) {
 }
 
 /*
- * Be sure to setup your config values before running this code. You can 
+ * Be sure to setup your config values before running this code. You can
  * set them using environment variables or modifying the config file in /config.
  *
  */
 // App ID can be retrieved from /app with page token
-const APP_ID = (process.env.APP_ID) ? 
+const APP_ID = (process.env.APP_ID) ?
   process.env.APP_ID :
   config.get('appId');
 
 // App Secret can be retrieved from the App Dashboard
-const APP_SECRET = (process.env.MESSENGER_APP_SECRET) ? 
+const APP_SECRET = (process.env.MESSENGER_APP_SECRET) ?
   process.env.MESSENGER_APP_SECRET :
   config.get('appSecret');
 
@@ -126,8 +126,8 @@ const PAGE_ACCESS_TOKEN = (process.env.MESSENGER_PAGE_ACCESS_TOKEN) ?
   (process.env.MESSENGER_PAGE_ACCESS_TOKEN) :
   config.get('pageAccessToken');
 
-// URL where the app is running (include protocol). Used to point to scripts and 
-// assets located at this address. 
+// URL where the app is running (include protocol). Used to point to scripts and
+// assets located at this address.
 const SERVER_URL = (process.env.SERVER_URL) ?
   (process.env.SERVER_URL) :
   config.get('serverURL');
@@ -166,12 +166,12 @@ function subscribeWebhook() {
     },
   }, function (error, response, body) {
     console.log('subscribeWebhook',response.body);
-  });  
+  });
 }
 
 /*
- * Verify that the callback came from Facebook. Using the App Secret from 
- * the App Dashboard, we can verify the signature that is sent with each 
+ * Verify that the callback came from Facebook. Using the App Secret from
+ * the App Dashboard, we can verify the signature that is sent with each
  * callback in the x-hub-signature field, located in the header.
  *
  * https://developers.facebook.com/docs/graph-api/webhooks#setup
@@ -181,7 +181,7 @@ function verifyRequestSignature(req, res, buf) {
   var signature = req.headers["x-hub-signature"];
 
   if (!signature) {
-    // For testing, let's log an error. In production, you should throw an 
+    // For testing, let's log an error. In production, you should throw an
     // error.
     console.error("Couldn't validate the signature.");
   } else {
@@ -200,25 +200,60 @@ function verifyRequestSignature(req, res, buf) {
 }
 
 /*
- * Use your own validation token. Check that the token used in the Webhook 
+ * Use your own validation token. Check that the token used in the Webhook
  * setup is the same token used here.
  *
  */
-app.get('/webhook', function(req, res) {
-  if (req.query['hub.mode'] === 'subscribe' &&
-      req.query['hub.verify_token'] === VALIDATION_TOKEN) {
-    console.log("Validating webhook");
-    res.status(200).send(req.query['hub.challenge']);
-  } else {
-    console.error("Failed validation. Make sure the validation tokens match.");
-    res.sendStatus(403);          
-  }  
+ app.get('/webhookworkchat', function(req, res) {
+   if (req.query['hub.mode'] === 'subscribe' &&
+       req.query['hub.verify_token'] === ConfigVars.VALIDATION_TOKEN) {
+     console.log("Validating webhook");
+     res.status(200).send(req.query['hub.challenge']);
+   } else {
+     console.error("Failed validation. Make sure the validation tokens match.");
+     res.sendStatus(403);
+   }
+ });
+
+ app.post('/webhookworkchat', function (req, res) {
+   var data = req.body;
+
+   // Make sure this is a page subscription
+   if (data.object == 'page') {
+     // Iterate over each entry
+     // There may be multiple if batched
+     data.entry.forEach(function(pageEntry) {
+       var pageID = pageEntry.id;
+       var timeOfEvent = pageEntry.time;
+
+       // Iterate over each messaging event
+       pageEntry.messaging.forEach(function(messagingEvent) {
+         if (messagingEvent.optin) {
+           receivedAuthentication(messagingEvent);
+         } else if (messagingEvent.message) {
+           receivedMessage(messagingEvent,"workchat");
+         } else if (messagingEvent.delivery) {
+           receivedDeliveryConfirmation(messagingEvent);
+         } else if (messagingEvent.postback) {
+           receivedPostback(messagingEvent,"workchat");
+         } else if (messagingEvent.read) {
+           receivedMessageRead(messagingEvent);
+         } else if (messagingEvent.account_linking) {
+           receivedAccountLink(messagingEvent);
+         } else {
+           console.log("Webhook received unknown messagingEvent: ", messagingEvent);
+         }
+       });
+     });
+
+     res.sendStatus(200);          
+  }
 });
 
 /*
  * All callbacks for Messenger are POST-ed. They will be sent to the same
  * webhook. Be sure to subscribe your app to your page to receive callbacks
- * for your page. 
+ * for your page.
  * https://developers.facebook.com/docs/messenger-platform/product-overview/setup#subscribe_app
  *
  */
@@ -255,7 +290,7 @@ app.post('/webhook', function (req, res) {
 
     // Assume all went well.
     //
-    // You must send back a 200, within 20 seconds, to let us know you've 
+    // You must send back a 200, within 20 seconds, to let us know you've
     // successfully received the callback. Otherwise, the request will time out.
     res.sendStatus(200);
   }
@@ -264,16 +299,16 @@ app.post('/webhook', function (req, res) {
 /*
  * Message Event
  *
- * This event is called when a message is sent to your page. The 'message' 
+ * This event is called when a message is sent to your page. The 'message'
  * object format can vary depending on the kind of message that was received.
  * Read more at https://developers.facebook.com/docs/messenger-platform/webhook-reference/message-received
  *
- * For this example, we're going to echo any text that we get. If we get some 
+ * For this example, we're going to echo any text that we get. If we get some
  * special keywords ('button', 'generic', 'receipt'), then we'll send back
- * examples of those bubbles to illustrate the special message bubbles we've 
- * created. If we receive a message with an attachment (image, video, audio), 
+ * examples of those bubbles to illustrate the special message bubbles we've
+ * created. If we receive a message with an attachment (image, video, audio),
  * then we'll simply confirm that we've received the attachment.
- * 
+ *
  */
 function receivedMessage(event) {
   var senderID = event.sender.id;
@@ -329,9 +364,9 @@ function sendAskForReceipt(senderID) {
 
 function handleReceiptMessage(senderID, message) {
   var claim = getActiveClaim(senderID);
-  if(claim 
-    && message.attachments 
-    && message.attachments[0] 
+  if(claim
+    && message.attachments
+    && message.attachments[0]
     && message.attachments[0].type == 'image') {
     claim.receipt = message.attachments[0].payload.url;
     sendAskForAmount(senderID);
@@ -383,24 +418,24 @@ function clearConversationState(senderID) {
 /*
  * Postback Event
  *
- * This event is called when a postback is tapped on a Structured Message. 
+ * This event is called when a postback is tapped on a Structured Message.
  * https://developers.facebook.com/docs/messenger-platform/webhook-reference/postback-received
- * 
+ *
  */
 function receivedPostback(event) {
   var senderID = event.sender.id;
   var recipientID = event.recipient.id;
   var timeOfPostback = event.timestamp;
 
-  // The 'payload' param is a developer-defined field which is set in a postback 
-  // button for Structured Messages. 
+  // The 'payload' param is a developer-defined field which is set in a postback
+  // button for Structured Messages.
   var payload = event.postback.payload;
   // Embed extra info int he payload in the format ACTION:OBJECT
   var tokens = payload.split(':');
   var action = tokens[0];
   var object = tokens[1];
 
-  // When a postback is called, we'll send a message back to the sender to 
+  // When a postback is called, we'll send a message back to the sender to
   // let them know it was successful
   switch (action) {
     case 'DELETE_CLAIM':
@@ -450,8 +485,8 @@ function sendTextMessage(recipientId, messageText) {
 }
 
 /*
- * Call the Send API. The message data goes in the body. If successful, we'll 
- * get the message id in a response 
+ * Call the Send API. The message data goes in the body. If successful, we'll
+ * get the message id in a response
  *
  */
 function callSendAPI(messageData) {
@@ -468,16 +503,16 @@ function callSendAPI(messageData) {
       var messageId = body.message_id;
 
       if (messageId) {
-        console.log("Successfully sent message with id %s to recipient %s", 
+        console.log("Successfully sent message with id %s to recipient %s",
           messageId, recipientId);
       } else {
-      console.log("Successfully called Send API for recipient %s", 
+      console.log("Successfully called Send API for recipient %s",
         recipientId);
       }
     } else {
       console.error("Failed calling Send API", response.statusCode, response.statusMessage, body.error);
     }
-  });  
+  });
 }
 
 function setupPersistentMenu() {
@@ -589,13 +624,13 @@ function sendGetStarted(recipientId) {
 
 function claimToElement(claim, viewerId) {
 
-  var subtitle = 'Amount: ' + claim.amount + 
+  var subtitle = 'Amount: ' + claim.amount +
     '\nStatus: ' + claim.status;
   if(claim.submitterName)
     subtitle += '\nSender: ' + claim.submitterName;
-  if(claim.approverName) 
+  if(claim.approverName)
     subtitle += '\nApprover: ' + claim.approverName;
-  
+
   var element = {
     title: claim.comment,
     subtitle: subtitle,
@@ -724,7 +759,7 @@ function rejectClaim(senderID, claimId) {
 }
 
 // Start server
-// Webhooks must be available via SSL with a certificate signed by a valid 
+// Webhooks must be available via SSL with a certificate signed by a valid
 // certificate authority.
 app.listen(app.get('port'), function() {
   console.log('Node app is running on port', app.get('port'));
