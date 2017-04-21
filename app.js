@@ -726,7 +726,7 @@ function rejectClaim(senderID, claimId) {
 // Start server
 // Webhooks must be available via SSL with a certificate signed by a valid
 // certificate authority.
-app.listen(app.get('port'), function() {
+app.listen(process.env.PORT || 3000, function() {
   console.log('Node app is running on port', app.get('port'));
   enableSubscriptions();
   subscribeWebhook();
