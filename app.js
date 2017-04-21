@@ -347,7 +347,7 @@ function sendAskForAmount(senderID) {
 
 function handleAmountMessage(senderID, message) {
   var claim = getActiveClaim(senderID);
-  var currencyRegex = /^[$£€]\d+(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d\d)*$/g;
+  var currencyRegex = /^[$£€]\d+(?:\.\d\d)*$/g;
   if(claim && message.text && message.text.match(currencyRegex)) {
     claim.amount = message.text;
     sendAskForComment(senderID);
