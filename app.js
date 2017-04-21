@@ -160,7 +160,7 @@ function subscribeWebhook() {
     method: 'POST',
     qs: {
       'object': 'page',
-      'fields': 'message_deliveries,messages,messaging_postbacks,messaging_optins',
+      'fields': 'message_deliveries,messages,messaging_postbacks',
       'verify_token': VALIDATION_TOKEN,
       'callback_url': SERVER_URL + '/webhook'
     },
