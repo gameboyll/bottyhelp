@@ -442,7 +442,7 @@ function sendTextMessage(recipientId, messageText) {
     },
     message: {
       text: messageText,
-      metadata: "BOTTY"
+      metadata: "DEVELOPER_DEFINED_METADATA"
     }
   };
 
